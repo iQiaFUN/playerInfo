@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
 const axios = require('axios');
+const logger = new NIL.Logger('PlayerInfo');
 const baseUrl = 'https://fc.iqia.fun';
 const { segment } = require('oicq');
 
@@ -45,6 +46,20 @@ class logindata extends NIL.ModuleBase{
         loginJob.start()
         checkFile('config.json',NIL.IO.readFrom(path.join(__dirname, 'example.json')))
         const cfg = JSON.parse(NIL.IO.readFrom(path.join(__dirname, 'config.json')))
+        if(cfg.ranking == undefined){
+            cfg.ranking = {
+                enable:true,
+                limit:15,
+                gold:"金币榜",
+                dig:"挖掘榜",
+                kill:"击杀榜",
+                death:"死亡榜",
+                place:"放置榜",
+                con:"连登榜",
+                cum:"累登榜"
+            }
+            save_data('config.json',cfg)
+        }
         api.listen('onPlayerJoin',(dt)=>{
             let data = JSON.parse(dt.message);
             let xboxid = data.params.sender;
@@ -129,6 +144,42 @@ class logindata extends NIL.ModuleBase{
                     e.reply('你还没有绑定白名单，无法查看统计数据');
                 }
             }
+            let list = loadPlayerData(cfg.path)
+            if(cfg.ranking.enable && list){
+                let tmp_arr,msg
+                switch(e.raw_message){
+                    case cfg.ranking.gold:
+                        tmp_arr = data_sort(list,'money')
+                        img_reply(e,cfg,tmp_arr,'MoneyList','金币排行榜')
+                        break;
+                    case cfg.ranking.kill:
+                        tmp_arr = data_sort(list,'kill')
+                        img_reply(e,cfg,tmp_arr,'KillList','击杀排行榜')
+                        break;
+                    case cfg.ranking.death:
+                        tmp_arr = data_sort(list,'death')
+                        img_reply(e,cfg,tmp_arr,'DeathList','死亡排行榜')
+                        break;
+                    case cfg.ranking.dig:
+                        tmp_arr = data_sort(list,'breakBlock')
+                        img_reply(e,cfg,tmp_arr,'DigList','挖掘排行榜')
+                        break;
+                    case cfg.ranking.place:
+                        tmp_arr = data_sort(list,'placeBlock')
+                        img_reply(e,cfg,tmp_arr,'PlaceLList','放置排行榜')
+                        break;
+                    case cfg.ranking.con:
+                        tmp_arr = login_sort(lgdata,'con')
+                        img_reply(e,cfg,tmp_arr,'Login_Con_List','连续登录榜')
+                        break;
+                    case cfg.ranking.cum:
+                        tmp_arr = login_sort(lgdata,'cum')
+                        img_reply(e,cfg,tmp_arr,'Login_Cum_List','累计登录榜')
+                        break;
+                    default:
+                        break;
+                }
+            }
         })
     }
     onStop(){
@@ -143,6 +194,45 @@ function postDate(dt){
             method: "POST",
             url:`${baseUrl}/card`,
             data: dt
+        }
+    )
+    return r
+}
+
+function img_reply(e,cfg,arr,type,title){
+    let arr_data = []
+    for(var a = 0; a < arr.length && a < cfg.ranking.limit; a++){
+		arr_data[a] = arr[a]
+	}
+    let data = {
+        type: type,
+        title: title,
+        data: arr_data
+    }
+    uploadDate(data).then(resp =>{
+        const data = resp.data;
+        if(data.url != undefined){
+            e.reply(segment.image(data.url))
+        }else{
+            let msg = format_msg(arr,title,cfg.ranking.limit)
+            e.reply(msg)
+        }
+    }).catch((err)=>{
+        logger.warn('获取图片连接失败，将发送文字排行榜')
+        if(cfg.debug){
+            console.log(err)
+        }
+        let msg = format_msg(arr,title,cfg.ranking.limit)
+        e.reply(msg)
+    })
+}
+
+function uploadDate(data){
+    let r = axios(
+        {
+            method: "POST",
+            url:`${baseUrl}/ranking`,
+            data: data
         }
     )
     return r
@@ -174,6 +264,49 @@ function getPlayerRecord(address,name) {
         }
     }
     return false;
+}
+
+function format_msg(arr,t,limit = 15){
+	let arr_data = [];
+	arr_data[0] = `${t}\n\n`;
+	for(var a = 0; a < arr.length && a < limit; a++){
+		let d = a + 1;
+		arr_data[d] = `${arr[a].xboxid}\t${arr[a].data}\n`;
+	}
+	return arr_data
+}
+
+function login_sort(tmp_data,p){
+	let p_data = JSON.parse(JSON.stringify(tmp_data, null, '\t'));
+	let p_arr = [];
+	var i = 0;
+	for(let m in p_data){
+		let tmp = p_data[m];
+		p_arr[i] = {xboxid:tmp['xboxid'],data:tmp[p]};
+		i++;
+	}	
+	p_arr.sort(compare('data'));
+	p_arr.reverse();
+	return p_arr;
+}
+
+function data_sort(arr,p){
+    let p_arr = [];
+    for(let i = 0; i < arr.length; i++){
+        let tmp = arr[i]
+        p_arr[i] = {xboxid:tmp['name'],data:tmp[p]}
+    }
+    p_arr.sort(compare('data'));
+	p_arr.reverse();
+	return p_arr;
+}
+
+function compare(prop){
+	return function(a,b) {
+		var value1 = a[prop];
+		var value2 = b[prop];
+		return value1-value2
+	}
 }
 
 module.exports = new logindata;

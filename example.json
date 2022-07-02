@@ -2,5 +2,16 @@
     "cmd":"个人信息",
     "path":"",
     "img":true,
+    "ranking":{
+        "enable":true,
+        "limit":15,
+        "gold":"金币榜",
+        "dig":"挖掘榜",
+        "kill":"击杀榜",
+        "death":"死亡榜",
+        "place":"放置榜",
+        "con":"连登榜",
+        "cum":"累登榜"
+    },
     "debug":false
 }
